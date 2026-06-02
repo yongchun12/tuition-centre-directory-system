@@ -1,0 +1,15 @@
+# Python
+ai-service/venv/
+crawler/venv/
+__pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# General
+node_modules/
+.env
+.env.local

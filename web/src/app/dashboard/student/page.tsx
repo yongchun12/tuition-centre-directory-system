@@ -1,10 +1,49 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Sparkles, BookOpen, Clock, Settings, LogOut, ChevronRight } from "lucide-react";
+import { Heart, Sparkles, BookOpen, Clock, Settings, LogOut, ChevronRight, AlertTriangle } from "lucide-react";
+import { aiService } from "@/services/aiService";
+import dbConnect from "@/lib/db";
+import { Booking } from "@/models/Booking";
+import { TuitionCentre } from "@/models/TuitionCentre";
+import { User } from "@/models/User";
 
-export default function StudentDashboard() {
+export default async function StudentDashboard() {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user) {
+    redirect("/auth/login");
+  }
+
+  await dbConnect();
+  
+  // Get real user profile from DB
+  const user = await User.findById((session.user as any).id).lean();
+  if (!user) {
+    redirect("/auth/login");
+  }
+
+  const studentProfile = {
+    user_id: user._id.toString(),
+    subjects_needed: user.subjectsNeeded && user.subjectsNeeded.length > 0 ? user.subjectsNeeded : ["Physics", "Additional Mathematics"],
+    preferred_location: user.preferredLocation || "Subang Jaya",
+    max_price: user.maxPrice || 300
+  };
+
+  // Fetch real-time AI recommendations from the Python Backend
+  let recommendations: any[] = [];
+  try {
+    recommendations = await aiService.getRecommendations(studentProfile);
+  } catch (error) {
+    console.error("AI Service Error:", error);
+  }
+
+  // Fetch live enquiries
+  const myEnquiries = await Booking.find({ studentId: user._id.toString() }).populate("centreId").sort({ createdAt: -1 }).lean();
+
   return (
     <div className="flex-1 bg-slate-50 dark:bg-slate-950 min-h-screen flex">
       {/* Dashboard Sidebar */}
@@ -59,56 +98,83 @@ export default function StudentDashboard() {
           <div className="space-y-6">
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-indigo-500" />
-              <h2 className="text-xl font-heading font-bold text-slate-900 dark:text-white">Top Matches For You</h2>
+              <h2 className="text-xl font-heading font-bold text-slate-900 dark:text-white">Live AI Matches For You</h2>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              {[
-                { name: "Apex Excellence Academy", match: 98, subject: "Physics", reason: "Matches your location and preference for small class sizes." },
-                { name: "Bright Sparks Learning", match: 85, subject: "Mathematics", reason: "Highly rated by students with similar academic goals." },
-              ].map((centre, i) => (
-                <Card key={i} className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="font-heading text-lg">{centre.name}</CardTitle>
-                      <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-none dark:bg-indigo-900/50 dark:text-indigo-300">
-                        {centre.match}% Match
-                      </Badge>
-                    </div>
-                    <CardDescription className="text-emerald-600 dark:text-emerald-400 font-medium text-xs mt-2">
-                      <Sparkles className="w-3 h-3 inline mr-1" />
-                      {centre.reason}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex justify-between items-center pt-2">
-                      <Badge variant="outline" className="text-slate-500 dark:text-slate-400">{centre.subject}</Badge>
-                      <Link href="/centres/1" className="text-sm font-medium text-indigo-600 dark:text-indigo-400 flex items-center hover:underline">
-                        View Details <ChevronRight className="w-4 h-4 ml-1" />
-                      </Link>
+            {recommendations.length === 0 ? (
+               <Card className="rounded-3xl border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-900">
+                  <CardContent className="flex items-center gap-3 p-6 text-rose-600 dark:text-rose-400">
+                    <AlertTriangle className="w-6 h-6" />
+                    <div>
+                      <h3 className="font-bold">Failed to load AI Recommendations</h3>
+                      <p className="text-sm">Please ensure the FastAPI service is running on port 8000.</p>
                     </div>
                   </CardContent>
-                </Card>
-              ))}
-            </div>
+               </Card>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-6">
+                {recommendations.map((rec, i) => (
+                  <Card key={i} className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-bl-[100px] -z-10" />
+                    <CardHeader className="pb-3 z-10 relative">
+                      <div className="flex justify-between items-start">
+                        <CardTitle className="font-heading text-lg">Centre ID: {rec.centre_id}</CardTitle>
+                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-none dark:bg-indigo-900/50 dark:text-indigo-300 shadow-sm">
+                          {Math.round(rec.match_score * 100)}% Match
+                        </Badge>
+                      </div>
+                      <CardDescription className="text-emerald-600 dark:text-emerald-400 font-medium text-xs mt-2 leading-relaxed">
+                        <Sparkles className="w-3.5 h-3.5 inline mr-1" />
+                        {rec.match_reason}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex justify-between items-center pt-2">
+                        <div className="flex gap-2">
+                          {studentProfile.subjects_needed.map(sub => (
+                             <Badge key={sub} variant="outline" className="text-slate-500 dark:text-slate-400">{sub}</Badge>
+                          ))}
+                        </div>
+                        <Link href={`/centres/${rec.centre_id}`} className="text-sm font-medium text-indigo-600 dark:text-indigo-400 flex items-center hover:underline">
+                          View Details <ChevronRight className="w-4 h-4 ml-1" />
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Recent Activity / Status */}
           <div className="grid md:grid-cols-2 gap-6">
             <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
               <CardHeader>
-                <CardTitle className="font-heading text-lg">Recent Enquiries</CardTitle>
+                <CardTitle className="font-heading text-lg">Your Recent Enquiries</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50">
-                  <div>
-                    <div className="font-semibold text-slate-900 dark:text-white text-sm">Global Mind Tutors</div>
-                    <div className="text-xs text-slate-500 flex items-center mt-1">
-                      <Clock className="w-3 h-3 mr-1" /> Sent 2 days ago
-                    </div>
+                {myEnquiries.length === 0 ? (
+                  <div className="p-4 text-center text-slate-500 text-sm bg-slate-50 dark:bg-slate-800 rounded-xl">
+                    You haven't made any enquiries yet.
                   </div>
-                  <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800">Pending</Badge>
-                </div>
+                ) : (
+                  myEnquiries.map((enq) => (
+                    <div key={enq._id.toString()} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50">
+                      <div>
+                        {/* Assuming populate successfully fetched centre name, otherwise fallback */}
+                        <div className="font-semibold text-slate-900 dark:text-white text-sm line-clamp-1">
+                          {(enq as any).centreId?.name || "Tuition Centre"}
+                        </div>
+                        <div className="text-xs text-slate-500 flex items-center mt-1">
+                          <Clock className="w-3 h-3 mr-1" /> Sent recently
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/30 dark:border-amber-800 capitalize">
+                        {enq.status}
+                      </Badge>
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
 
@@ -123,7 +189,7 @@ export default function StudentDashboard() {
                 <div className="w-full bg-white/20 rounded-full h-2 mb-4">
                   <div className="bg-white h-2 rounded-full w-[40%]"></div>
                 </div>
-                <Button className="w-full bg-white text-indigo-600 hover:bg-slate-100 rounded-xl font-bold">
+                <Button className="w-full bg-white text-indigo-600 hover:bg-slate-100 rounded-xl font-bold shadow-sm">
                   Continue Setup
                 </Button>
               </CardContent>

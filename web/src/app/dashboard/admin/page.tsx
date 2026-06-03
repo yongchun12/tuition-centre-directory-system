@@ -2,9 +2,20 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Database, ShieldCheck, Activity, BrainCircuit, Globe, LogOut, FileSearch, CheckCircle2, XCircle } from "lucide-react";
+import { Users, Database, ShieldCheck, Activity, BrainCircuit, Globe, LogOut, FileSearch, CheckCircle2, XCircle, SearchX } from "lucide-react";
+import dbConnect from "@/lib/db";
+import { TuitionCentre } from "@/models/TuitionCentre";
+import { approveCentreAction, rejectCentreAction } from "./actions";
 
-export default function AdminDashboard() {
+export default async function AdminDashboard() {
+  await dbConnect();
+
+  // Fetch real statistics
+  const activeCentresCount = await TuitionCentre.countDocuments({ status: "approved" });
+  
+  // Fetch pending centres scraped by the crawler
+  const pendingCentres = await TuitionCentre.find({ status: "pending" }).sort({ createdAt: -1 }).lean();
+
   return (
     <div className="flex-1 bg-slate-50 dark:bg-slate-950 min-h-screen flex">
       {/* Dashboard Sidebar */}
@@ -72,8 +83,8 @@ export default function AdminDashboard() {
                   <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Active Centres</p>
                   <Database className="w-4 h-4 text-emerald-500" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">348</h3>
-                <p className="text-xs text-emerald-600 mt-1 font-medium">+12 approved today</p>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{activeCentresCount}</h3>
+                <p className="text-xs text-emerald-600 mt-1 font-medium">Verified by Admin</p>
               </CardContent>
             </Card>
 
@@ -107,46 +118,51 @@ export default function AdminDashboard() {
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="font-heading text-lg">Pending Approvals</CardTitle>
-                    <CardDescription>New centres requiring manual verification.</CardDescription>
+                    <CardDescription>Centres discovered by Crawler requiring manual verification.</CardDescription>
                   </div>
                   <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none dark:bg-amber-900/50 dark:text-amber-400">
-                    3 Pending
+                    {pendingCentres.length} Pending
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="p-0 h-96 overflow-y-auto">
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {[
-                    { name: "Genius Math Centre", location: "Kuala Lumpur", submittedBy: "Alex Wong" },
-                    { name: "Pusat Tuisyen Bintang", location: "Johor Bahru", submittedBy: "Siti Nurhaliza" },
-                    { name: "Elite Science Academy", location: "Penang", submittedBy: "David Tan" },
-                  ].map((centre, i) => (
-                    <div key={i} className="p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h4 className="font-bold text-slate-900 dark:text-white">{centre.name}</h4>
-                          <p className="text-xs text-slate-500 mt-0.5">Location: {centre.location} • Submitted by: {centre.submittedBy}</p>
+                  {pendingCentres.length === 0 ? (
+                    <div className="p-8 text-center flex flex-col items-center text-slate-500">
+                        <SearchX className="w-10 h-10 mb-3 text-slate-300 dark:text-slate-700" />
+                        <p className="font-medium">No pending centres found.</p>
+                        <p className="text-sm mt-1">Run the web crawler to fetch new data.</p>
+                    </div>
+                  ) : (
+                    pendingCentres.map((centre) => (
+                      <div key={centre._id.toString()} className="p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-bold text-slate-900 dark:text-white">{centre.name}</h4>
+                            <p className="text-xs text-slate-500 mt-0.5">Location: {centre.city}, {centre.state} • Discovered via Scrapy</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <form action={approveCentreAction.bind(null, centre._id.toString())} className="flex-1">
+                            <Button type="submit" size="sm" className="w-full h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white">
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
+                            </Button>
+                          </form>
+                          <form action={rejectCentreAction.bind(null, centre._id.toString())}>
+                            <Button type="submit" size="sm" variant="ghost" className="h-8 px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">
+                              <XCircle className="w-4 h-4" /> Reject
+                            </Button>
+                          </form>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" className="h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white flex-1">
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-8 text-xs text-slate-600 dark:text-slate-300 flex-1">
-                          <FileSearch className="w-3.5 h-3.5 mr-1" /> Review Docs
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-8 px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">
-                          <XCircle className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
 
             {/* AI Engine Logs */}
-            <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+            <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full">
               <CardHeader className="bg-slate-900 border-b border-slate-800 pb-4">
                 <div className="flex justify-between items-center">
                   <div>

@@ -1,5 +1,8 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import dbConnect from "@/lib/db";
+import { User } from "@/models/User";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -10,11 +13,28 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials, req) {
-        // TODO: Implement actual DB lookup and verification
-        if (credentials?.email === "admin@test.com" && credentials?.password === "password") {
-          return { id: "1", name: "Admin", email: "admin@test.com", role: "Admin" };
+        if (!credentials?.email || !credentials?.password) {
+          return null;
         }
-        return null;
+
+        await dbConnect();
+
+        const user = await User.findOne({ email: credentials.email }).lean();
+        if (!user) {
+          return null;
+        }
+
+        const isValid = await bcrypt.compare(credentials.password, user.passwordHash);
+        if (!isValid) {
+          return null;
+        }
+
+        return { 
+          id: user._id.toString(), 
+          name: user.name, 
+          email: user.email, 
+          role: user.role 
+        };
       }
     })
   ],
@@ -22,12 +42,14 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.role = (user as any).role;
+        token.id = user.id;
       }
       return token;
     },
     async session({ session, token }) {
       if (session?.user) {
         (session.user as any).role = token.role;
+        (session.user as any).id = token.id;
       }
       return session;
     }

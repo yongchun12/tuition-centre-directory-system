@@ -4,64 +4,41 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { MapPin, Star, BookOpen, Clock, Heart, Search, Sparkles } from "lucide-react";
+import dbConnect from "@/lib/db";
+import { TuitionCentre } from "@/models/TuitionCentre";
 
-// Mock Data for the Showcase
-const mockCentres = [
-  {
-    id: "1",
-    name: "Apex Excellence Academy",
-    description: "Premium tuition specializing in STEM subjects with a track record of 90% A* students.",
-    location: "Petaling Jaya, Selangor",
-    rating: 4.9,
-    reviews: 128,
-    subjects: ["Additional Math", "Physics", "Chemistry"],
-    price: "RM 250/mo",
-    mode: "Hybrid",
-    aiMatch: 98,
-    image: "bg-gradient-to-br from-indigo-500 to-purple-600",
-  },
-  {
-    id: "2",
-    name: "Bright Sparks Learning",
-    description: "Interactive and engaging classes focusing on secondary school core subjects.",
-    location: "Subang Jaya, Selangor",
-    rating: 4.7,
-    reviews: 84,
-    subjects: ["English", "Mathematics", "Science"],
-    price: "RM 180/mo",
-    mode: "Physical",
-    aiMatch: 85,
-    image: "bg-gradient-to-br from-blue-500 to-cyan-500",
-  },
-  {
-    id: "3",
-    name: "Global Mind Tutors",
-    description: "International syllabus experts (IGCSE/A-Levels) with highly qualified educators.",
-    location: "Kuala Lumpur",
-    rating: 4.8,
-    reviews: 215,
-    subjects: ["Biology", "Economics", "Business"],
-    price: "RM 300/mo",
-    mode: "Online",
-    aiMatch: 92,
-    image: "bg-gradient-to-br from-emerald-500 to-teal-600",
-  },
-  {
-    id: "4",
-    name: "Pusat Tuisyen Cemerlang",
-    description: "Affordable and comprehensive tuition for SPM preparations.",
-    location: "Shah Alam, Selangor",
-    rating: 4.5,
-    reviews: 312,
-    subjects: ["Sejarah", "Bahasa Melayu", "Mathematics"],
-    price: "RM 120/mo",
-    mode: "Physical",
-    aiMatch: 78,
-    image: "bg-gradient-to-br from-orange-500 to-red-500",
-  }
-];
+// Helper to assign a random gradient based on centre ID string length or char code
+const getGradient = (id: string) => {
+  const gradients = [
+    "bg-gradient-to-br from-indigo-500 to-purple-600",
+    "bg-gradient-to-br from-blue-500 to-cyan-500",
+    "bg-gradient-to-br from-emerald-500 to-teal-600",
+    "bg-gradient-to-br from-orange-500 to-red-500",
+  ];
+  const index = id.charCodeAt(id.length - 1) % gradients.length;
+  return gradients[index];
+};
 
-export default function CentresDirectory() {
+export default async function CentresDirectory() {
+  // Connect to DB and fetch real data
+  await dbConnect();
+  const rawCentres = await TuitionCentre.find({ status: "approved" }).sort({ averageRating: -1 }).lean();
+  
+  // Serialize Mongoose documents to plain JS objects for the Next.js client
+  const centres = rawCentres.map((c: any) => ({
+    id: c._id.toString(),
+    name: c.name,
+    description: c.description,
+    location: `${c.city}, ${c.state}`,
+    rating: c.averageRating || 4.5, // Fallback if 0
+    reviews: Math.floor(Math.random() * 200) + 10, // Mock review count for now
+    subjects: c.subjects,
+    price: c.priceRange,
+    mode: c.teachingMode.charAt(0).toUpperCase() + c.teachingMode.slice(1),
+    aiMatch: Math.floor(Math.random() * 20) + 80, // Mock AI Match between 80-100
+    image: getGradient(c._id.toString()),
+  }));
+
   return (
     <div className="flex-1 bg-slate-50 dark:bg-slate-950 min-h-screen">
       {/* Header Banner */}
@@ -139,7 +116,7 @@ export default function CentresDirectory() {
           {/* Main Content Area */}
           <div className="flex-1">
             <div className="flex items-center justify-between mb-6">
-              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Showing {mockCentres.length} results</span>
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Showing {centres.length} results</span>
               <select className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-300 outline-none cursor-pointer">
                 <option>Sort by: Recommended</option>
                 <option>Sort by: Highest Rated</option>
@@ -147,8 +124,14 @@ export default function CentresDirectory() {
               </select>
             </div>
 
+            {centres.length === 0 && (
+              <div className="text-center py-12 text-slate-500">
+                No approved centres found in the database.
+              </div>
+            )}
+
             <div className="grid md:grid-cols-2 gap-6">
-              {mockCentres.map((centre) => (
+              {centres.map((centre: any) => (
                 <Card key={centre.id} className="group overflow-hidden rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-indigo-500/30 transition-all duration-300 flex flex-col">
                   {/* Image/Gradient Header */}
                   <div className={`h-32 w-full ${centre.image} relative p-4 flex items-start justify-between`}>
@@ -164,13 +147,13 @@ export default function CentresDirectory() {
                   <CardHeader className="pt-4 pb-2">
                     <div className="flex justify-between items-start gap-2">
                       <Link href={`/centres/${centre.id}`}>
-                        <h3 className="font-heading font-bold text-xl text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        <h3 className="font-heading font-bold text-xl text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
                           {centre.name}
                         </h3>
                       </Link>
                     </div>
                     <div className="flex items-center text-sm text-slate-500 dark:text-slate-400 mt-1">
-                      <MapPin className="w-4 h-4 mr-1" />
+                      <MapPin className="w-4 h-4 mr-1 shrink-0" />
                       {centre.location}
                     </div>
                   </CardHeader>
@@ -180,7 +163,7 @@ export default function CentresDirectory() {
                       {centre.description}
                     </p>
                     <div className="flex flex-wrap gap-2 mb-4">
-                      {centre.subjects.map(subject => (
+                      {centre.subjects.map((subject: string) => (
                         <Badge key={subject} variant="secondary" className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200">
                           {subject}
                         </Badge>
@@ -189,7 +172,7 @@ export default function CentresDirectory() {
                     
                     {/* AI Recommendation Badge */}
                     {centre.aiMatch > 80 && (
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-semibold border border-indigo-100 dark:border-indigo-800">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-semibold border border-indigo-100 dark:border-indigo-800 mt-auto">
                         <Sparkles className="w-3.5 h-3.5" />
                         {centre.aiMatch}% Match for you
                       </div>
@@ -199,7 +182,7 @@ export default function CentresDirectory() {
                   <CardFooter className="border-t border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
                     <div>
                       <div className="text-lg font-bold text-slate-900 dark:text-white">{centre.price}</div>
-                      <div className="text-xs text-slate-500 flex items-center">
+                      <div className="text-xs text-slate-500 flex items-center mt-0.5">
                         <Clock className="w-3.5 h-3.5 mr-1" />
                         {centre.mode} Mode
                       </div>

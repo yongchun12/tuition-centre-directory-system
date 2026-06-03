@@ -1,0 +1,5 @@
+scrapy
+selenium
+pymongo
+python-dotenv
+pandas

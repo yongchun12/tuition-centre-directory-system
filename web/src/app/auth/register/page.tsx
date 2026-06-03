@@ -1,7 +1,38 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [role, setRole] = useState("student");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, role }),
+      });
+
+      if (res.ok) {
+        router.push("/auth/login");
+      } else {
+        const data = await res.json();
+        alert(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      alert("Something went wrong");
+    }
+  };
+
   return (
     <div className="flex-1 flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
       <div className="w-full max-w-md p-8 rounded-3xl bg-white dark:bg-slate-900 shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-800 my-8">
@@ -10,16 +41,16 @@ export default function RegisterPage() {
           <p className="text-slate-500 dark:text-slate-400">Join TuitionDir to find your perfect centre</p>
         </div>
 
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleRegister}>
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">I am a...</label>
             <div className="grid grid-cols-2 gap-4">
               <label className="flex items-center justify-center p-4 border border-slate-200 dark:border-slate-800 rounded-xl cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50/50 dark:has-[:checked]:bg-indigo-500/10 transition-all">
-                <input type="radio" name="role" value="student" className="hidden" defaultChecked />
+                <input type="radio" name="role" value="student" className="hidden" checked={role === "student"} onChange={() => setRole("student")} />
                 <span className="font-medium dark:text-white">Student / Parent</span>
               </label>
               <label className="flex items-center justify-center p-4 border border-slate-200 dark:border-slate-800 rounded-xl cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50/50 dark:has-[:checked]:bg-indigo-500/10 transition-all">
-                <input type="radio" name="role" value="owner" className="hidden" />
+                <input type="radio" name="role" value="owner" className="hidden" checked={role === "owner"} onChange={() => setRole("owner")} />
                 <span className="font-medium dark:text-white">Centre Owner</span>
               </label>
             </div>
@@ -29,8 +60,11 @@ export default function RegisterPage() {
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</label>
             <input 
               type="text" 
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
               placeholder="John Doe"
+              required
             />
           </div>
 
@@ -38,8 +72,11 @@ export default function RegisterPage() {
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address</label>
             <input 
               type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
               placeholder="you@example.com"
+              required
             />
           </div>
           
@@ -47,12 +84,15 @@ export default function RegisterPage() {
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
             <input 
               type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
               placeholder="••••••••"
+              required
             />
           </div>
           
-          <Button className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base mt-6">
+          <Button type="submit" className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base mt-6">
             Create Account
           </Button>
         </form>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
@@ -10,16 +11,28 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Dummy authentication routing for showcase
+    // Uses NextAuth Credentials provider
+    const res = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (res?.error) {
+      alert("Invalid credentials");
+      return;
+    }
+
+    // Redirect based on dummy user or actual role (we can just redirect to generic /dashboard and let layout or next step handle it, but for simplicity let's rely on the role we know, or just refresh and let middleware/layout handle it).
+    // The showcase hardcoded the routing, let's keep it similar based on email for the prototype, or we could fetch the session.
     if (email === "admin@test.com") {
       router.push("/dashboard/admin");
-    } else if (email === "owner@test.com") {
+    } else if (email === "owner@test.com" || email.includes("owner")) {
       router.push("/dashboard/owner");
     } else {
-      // Default to student dashboard
       router.push("/dashboard/student");
     }
   };

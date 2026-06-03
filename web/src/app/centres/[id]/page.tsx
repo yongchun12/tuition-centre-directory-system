@@ -1,17 +1,86 @@
-"use client";
-
 import { use } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft, Heart, ShieldCheck, ThumbsUp, ThumbsDown, Minus, Sparkles, BookOpen } from "lucide-react";
+import dbConnect from "@/lib/db";
+import { TuitionCentre } from "@/models/TuitionCentre";
+import { Review } from "@/models/Review";
+import ReviewForm from "@/components/ReviewForm";
+import { submitEnquiryAction } from "./actions";
 
-export default function CentreDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
+export default async function CentreDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params; // Must await params in Server Components
   
+  await dbConnect();
+  
+  let centre = null;
+  let reviewsList: { id: string; name: string; score: string; text: string; rating: number; }[] = [];
+  let aiSummary = { pos: 85, neu: 10, neg: 5, total: 128 }; // Default mock
+
+  try {
+    const rawCentre = await TuitionCentre.findById(resolvedParams.id).lean();
+    if (rawCentre) {
+      centre = {
+        id: rawCentre._id.toString(),
+        name: rawCentre.name,
+        description: rawCentre.description,
+        location: `${rawCentre.city}, ${rawCentre.state}`,
+        rating: rawCentre.averageRating || 4.5,
+        reviews: Math.floor(Math.random() * 200) + 10, // Mock review count for now
+        subjects: rawCentre.subjects,
+        price: rawCentre.priceRange,
+        mode: rawCentre.teachingMode.charAt(0).toUpperCase() + rawCentre.teachingMode.slice(1),
+      };
+
+      // Fetch actual reviews from DB for this centre
+      const rawReviews = await Review.find({ centreId: resolvedParams.id }).sort({ createdAt: -1 }).lean();
+      
+      reviewsList = rawReviews.map(r => ({
+        id: r._id.toString(),
+        name: "Student User", // Mocked user name since we aren't populating user
+        score: r.sentimentScore || "neutral",
+        text: r.comment,
+        rating: r.rating
+      }));
+
+      // If we have real reviews, recalculate the AI summary percentages dynamically!
+      if (reviewsList.length > 0) {
+        let pos = 0; let neu = 0; let neg = 0;
+        reviewsList.forEach(r => {
+          if (r.score === 'positive') pos++;
+          else if (r.score === 'negative') neg++;
+          else neu++;
+        });
+        const total = reviewsList.length;
+        aiSummary = {
+          pos: Math.round((pos / total) * 100),
+          neu: Math.round((neu / total) * 100),
+          neg: Math.round((neg / total) * 100),
+          total: total
+        };
+      }
+    }
+  } catch (error) {
+    console.error("Invalid ID format or DB Error:", error);
+  }
+
+  if (!centre) {
+    notFound();
+  }
+
+  // If there are no real reviews yet, provide some mock ones for the prototype
+  if (reviewsList.length === 0) {
+    reviewsList = [
+      { id: "1", name: "Sarah Lim", score: "positive", text: "Teacher was amazing, helped me pull up my Add Math grade from C to A- in just 3 months.", rating: 5 },
+      { id: "2", name: "Jason Chong", score: "neutral", text: "Classes are okay, standard stuff. But the chairs are a bit uncomfortable for 2-hour sessions.", rating: 3 },
+    ];
+  }
+
   return (
     <div className="bg-slate-50 dark:bg-slate-950 min-h-screen pb-20">
       {/* Premium Hero Section */}
@@ -33,17 +102,17 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
                     <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Verified Centre
                   </Badge>
                   <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-none">
-                    Hybrid Mode
+                    {centre.mode} Mode
                   </Badge>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-heading font-bold text-white mb-2">Apex Excellence Academy</h1>
+                <h1 className="text-4xl md:text-5xl font-heading font-bold text-white mb-2">{centre.name}</h1>
                 <div className="flex items-center text-slate-200 text-sm md:text-base">
                   <MapPin className="w-4 h-4 mr-1" />
-                  Petaling Jaya, Selangor
+                  {centre.location}
                   <Separator orientation="vertical" className="h-4 mx-3 bg-slate-500" />
                   <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 mr-1" />
-                  <span className="font-medium text-white">4.9</span>
-                  <span className="ml-1 text-slate-300">(128 reviews)</span>
+                  <span className="font-medium text-white">{centre.rating}</span>
+                  <span className="ml-1 text-slate-300">({aiSummary.total} reviews)</span>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -78,13 +147,8 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
                   <CardHeader>
                     <CardTitle className="font-heading text-2xl">About this Centre</CardTitle>
                   </CardHeader>
-                  <CardContent className="text-slate-600 dark:text-slate-300 leading-relaxed space-y-4">
-                    <p>
-                      Apex Excellence Academy is a premium tuition centre specializing in STEM subjects for secondary school students. With a team of highly qualified educators and a proven track record, we ensure that every student reaches their full potential.
-                    </p>
-                    <p>
-                      Our state-of-the-art facilities include interactive smart boards, a dedicated science lab, and comfortable learning spaces designed to foster focus and creativity.
-                    </p>
+                  <CardContent className="text-slate-600 dark:text-slate-300 leading-relaxed space-y-4 whitespace-pre-wrap">
+                    {centre.description}
                   </CardContent>
                 </Card>
 
@@ -123,24 +187,24 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                     <CardTitle className="font-heading text-2xl">Sentiment Analysis Summary</CardTitle>
                     <CardDescription>
-                      Our ML model processed 128 student reviews to bring you the truth about this centre.
+                      Our ML model processed {aiSummary.total} student reviews to bring you the truth about this centre.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="relative z-10">
                     <div className="grid grid-cols-3 gap-4 mb-6">
                       <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
                         <ThumbsUp className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
-                        <div className="text-2xl font-bold text-slate-900 dark:text-white">85%</div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.pos}%</div>
                         <div className="text-xs text-slate-500 font-medium">Positive</div>
                       </div>
                       <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
                         <Minus className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                        <div className="text-2xl font-bold text-slate-900 dark:text-white">10%</div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.neu}%</div>
                         <div className="text-xs text-slate-500 font-medium">Neutral</div>
                       </div>
                       <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
                         <ThumbsDown className="w-6 h-6 text-rose-500 mx-auto mb-2" />
-                        <div className="text-2xl font-bold text-slate-900 dark:text-white">5%</div>
+                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.neg}%</div>
                         <div className="text-xs text-slate-500 font-medium">Negative</div>
                       </div>
                     </div>
@@ -148,7 +212,7 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
                     <div className="bg-white/60 dark:bg-slate-800/60 rounded-xl p-4 backdrop-blur-sm border border-indigo-100 dark:border-indigo-800/50">
                       <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
                         <span className="font-bold">AI Verdict: </span> 
-                        Highly recommended for students struggling with Advanced Mathematics. Reviewers frequently praise the "patient teachers" and "clear explanations". Some minor complaints regarding limited parking space during peak hours.
+                        {aiSummary.pos > 70 ? "Highly recommended by students." : "Mixed reception from students."} 
                       </p>
                     </div>
                   </CardContent>
@@ -156,12 +220,9 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
 
                 {/* Individual Reviews */}
                 <div className="space-y-4">
-                  {[
-                    { name: "Sarah Lim", score: "positive", text: "Teacher was amazing, helped me pull up my Add Math grade from C to A- in just 3 months. The notes are very concise.", rating: 5 },
-                    { name: "Jason Chong", score: "neutral", text: "Classes are okay, standard stuff. But the chairs are a bit uncomfortable for 2-hour sessions.", rating: 3 },
-                    { name: "Ahmad Fizal", score: "positive", text: "Best tuition centre in PJ! The hybrid mode makes it so convenient when I can't travel due to heavy rain.", rating: 5 },
-                  ].map((review, i) => (
-                    <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex gap-4">
+                  <h3 className="font-heading font-bold text-xl dark:text-white mb-4">Student Experiences</h3>
+                  {reviewsList.map((review) => (
+                    <div key={review.id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex gap-4">
                       <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0">
                         <span className="font-bold text-slate-500">{review.name[0]}</span>
                       </div>
@@ -182,6 +243,10 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                   ))}
                 </div>
+
+                {/* Interactive Review Submission Form */}
+                <ReviewForm centreId={centre.id} />
+
               </TabsContent>
               
               <TabsContent value="subjects" className="mt-6">
@@ -191,7 +256,7 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
                    </CardHeader>
                    <CardContent>
                      <div className="space-y-4">
-                       {["Additional Mathematics", "Physics", "Chemistry"].map(sub => (
+                       {centre.subjects.map((sub: string) => (
                          <div key={sub} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
                            <div className="flex items-center gap-3">
                              <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400">
@@ -199,7 +264,7 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
                              </div>
                              <span className="font-semibold text-slate-900 dark:text-white">{sub}</span>
                            </div>
-                           <span className="font-bold text-indigo-600 dark:text-indigo-400">RM 150/mo</span>
+                           <span className="font-bold text-indigo-600 dark:text-indigo-400">{centre.price}</span>
                          </div>
                        ))}
                      </div>
@@ -219,16 +284,21 @@ export default function CentreDetailPage({ params }: { params: Promise<{ id: str
                   <CardDescription>Get in touch with the centre admin directly.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Your Message</label>
-                    <textarea 
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none h-32 dark:text-white"
-                      placeholder="Hi, I would like to know more about the Form 5 Add Math class..."
-                    ></textarea>
-                  </div>
-                  <Button className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base">
-                    <MessageSquare className="w-5 h-5 mr-2" /> Send Message
-                  </Button>
+                  <form action={submitEnquiryAction}>
+                    <input type="hidden" name="centreId" value={centre.id} />
+                    <div className="space-y-2 mb-4">
+                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Your Message</label>
+                      <textarea 
+                        name="message"
+                        required
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none h-32 dark:text-white"
+                        placeholder={`Hi, I would like to know more about the classes at ${centre.name}...`}
+                      ></textarea>
+                    </div>
+                    <Button type="submit" className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base">
+                      <MessageSquare className="w-5 h-5 mr-2" /> Send Message
+                    </Button>
+                  </form>
                 </CardContent>
               </Card>
 

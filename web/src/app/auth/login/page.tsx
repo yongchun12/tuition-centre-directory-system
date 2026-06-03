@@ -1,22 +1,47 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Dummy authentication routing for showcase
+    if (email === "admin@test.com") {
+      router.push("/dashboard/admin");
+    } else if (email === "owner@test.com") {
+      router.push("/dashboard/owner");
+    } else {
+      // Default to student dashboard
+      router.push("/dashboard/student");
+    }
+  };
+
   return (
-    <div className="flex-1 flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
+    <div className="flex-1 flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 min-h-[calc(100vh-4rem)]">
       <div className="w-full max-w-md p-8 rounded-3xl bg-white dark:bg-slate-900 shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-800">
         <div className="text-center mb-8">
           <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900 dark:text-white mb-2">Welcome Back</h1>
           <p className="text-slate-500 dark:text-slate-400">Sign in to your account to continue</p>
         </div>
 
-        <form className="space-y-4">
+        <form className="space-y-4" onSubmit={handleLogin}>
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address</label>
             <input 
               type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
-              placeholder="you@example.com"
+              placeholder="student@test.com"
+              required
             />
           </div>
           <div className="space-y-2">
@@ -26,15 +51,27 @@ export default function LoginPage() {
             </div>
             <input 
               type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
               placeholder="••••••••"
+              required
             />
           </div>
           
-          <Button className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base mt-4">
+          <Button type="submit" className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base mt-4">
             Sign In
           </Button>
         </form>
+
+        <div className="mt-6 p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 text-xs text-indigo-800 dark:text-indigo-300">
+          <p className="font-bold mb-1">Showcase Credentials (Any Password):</p>
+          <ul className="space-y-1 ml-2">
+            <li>• student@test.com → Student Dashboard</li>
+            <li>• owner@test.com → Owner Dashboard</li>
+            <li>• admin@test.com → Admin Dashboard</li>
+          </ul>
+        </div>
 
         <p className="text-center mt-8 text-slate-500 dark:text-slate-400">
           Don't have an account?{" "}
